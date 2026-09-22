@@ -189,27 +189,25 @@ float angle = Angle;
 
 ## 编译与烧录
 
-### 环境准备
+本工程用 **CubeMX + CLion** 开发，所以编译和烧录也都在 CLion 里完成，不需要敲命令行。
+
+用 CLion **打开工程根目录** `Hal+FreeRTOS/`（不是里面的 `build/`），然后：
+
+1. **选预设** —— CLion 会自动读取 `CMakePresets.json`。在 CMake 工具窗里选 `Debug`，点 **Reload CMake Project**。（之后只要改过 `CMakeLists.txt`，都得重新 Reload 一次）
+2. **编译** —— **Build → Build Project**（快捷键 `Ctrl+F9`）。产物在 `build/Debug/HAL.elf`，同目录还有 `HAL.map`（符号表，排查 Flash / RAM 占用就靠它）
+3. **烧录** —— 配置好烧录器之后点运行，就下载进芯片了
+
+> **烧录器的配置**参考了 B 站 UP 主 **keysking** 的《CubeMX + CLion 开发 STM32》教程 —— 怎么接 OpenOCD / ST-Link 看他的视频，讲得比我这里细。
+
+### 前置条件
 
 | 需要什么 | 说明 |
 |---|---|
 | **CLion** | 本工程按 CLion 组织，`.idea/` 已排除在版本库外 |
 | **`arm-none-eabi-gcc`** | 交叉编译工具链，工具链文件是 `cmake/gcc-arm-none-eabi.cmake`。装好后要确认 `bin` 目录在系统 PATH 里，否则 CLion 找不到编译器 |
-| **CMake ≥ 3.22** | CLion 捆绑的版本就够 |
-| **Ninja** | 同上，CLion 捆绑的就行 |
+| **CMake ≥ 3.22 / Ninja** | CLion 捆绑的版本就够 |
 
-### 在 CLion 里编译
-
-1. 用 CLion **打开工程根目录** `Hal+FreeRTOS/`（不是里面的 `build/`）
-2. CLion 会自动读取 `CMakePresets.json`。在 **CMake 工具窗**里能看到 `Debug` 和 `Release` 两个预设，选 `Debug`，点 **Reload CMake Project**。以后只要改过 `CMakeLists.txt`，都得重新 Reload 一次
-3. 构建：**Build → Build Project**（快捷键 `Ctrl+F9`）
-4. 产物在 `build/Debug/HAL.elf`，同目录还有 `HAL.map`（符号表，之后排查 Flash / RAM 占用就靠它）
-
-> 工程里没配 `objcopy` 规则，所以不会自动生成 `.hex` / `.bin`。烧录直接用 `.elf` 就行；确实需要 `.hex`，在 `CMakeLists.txt` 里补一条 `POST_BUILD` 规则即可。
-
-### 在 CLion 里烧录
-
-**Run → Edit Configurations → `+` → OpenOCD Download & Run**，在 `Board config file` 里选 ST-Link 的配置文件（如 `st_myboard.cfg` 之类），目标文件选上一步生成的 `HAL.elf`。配好之后点运行，就会通过 ST-Link 下载进芯片。
+> 工程里没配 `objcopy` 规则，所以不会自动生成 `.hex` / `.bin`，烧录直接用 `.elf` 就行。
 
 ### 资源占用（Debug 构建）
 
