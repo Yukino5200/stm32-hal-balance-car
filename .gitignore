@@ -1,0 +1,21 @@
+# 编译产物：可重新生成。提交了只会制造巨大的 diff 和合并冲突
+build/
+cmake-build-*/
+
+# CLion 的 IDE 状态
+.idea/
+
+# CubeMX 整包拷过来的预编译库和 DSP 包，本工程用 GCC 编译，一行都没引用
+Drivers/CMSIS/Lib/
+Drivers/CMSIS/DSP/
+
+# 零散产物兜底
+*.o
+*.d
+*.elf
+*.bin
+*.hex
+*.map
+*.su
+*~
+*.swp
