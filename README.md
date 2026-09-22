@@ -19,30 +19,40 @@
 | 主控 | STM32F103C8T6（Cortex-M3，72 MHz，64 KB Flash / 20 KB RAM，LQFP48） |
 | 姿态传感器 | MPU6050 六轴（三轴加速度计 + 三轴陀螺仪） |
 | 显示 | 0.96" OLED，128×64，SSD1306 兼容，I2C 地址 `0x78` |
-| 电机驱动 | TB6612 类模块（`AIN1/AIN2/BIN1/BIN2` + `PWMA/PWMB`） |
+| 电机驱动 | **TB6612FNG**（原理图 U2，`AIN1/AIN2/BIN1/BIN2` + `PWMA/PWMB`） |
 | 电机 | 直流减速电机 ×2，带霍尔编码器，减速比 9.27666，磁铁每转 44 计数 |
 | 蓝牙 | JDY 系列串口透传模块，接 USART2，**9600 8N1** |
+| 无线遥控 | NRF24L01 模块座（原理图 U5），配 `遥控器-V2.0` 板使用，**当前固件未驱动** |
+| 电源 | DCDC-5V（U7）→ LDO-3.3V（U6），输入接 J1 |
 
 MPU6050 和 OLED 都走**软件 I2C**（GPIO 位翻转），没有用硬件 I2C 外设。
 
 ## 引脚分配
 
-| 引脚 | 功能 | 说明 |
-|---|---|---|
-| PA0 | `PWMA` | 左电机 PWM，TIM2_CH1 |
-| PA1 | `PWMB` | 右电机 PWM，TIM2_CH2 |
-| PA2 / PA3 | USART2 TX / RX | 蓝牙模块 |
-| PA4 / PA5 | Key4 / Key3 | 未使用 |
-| PA6 / PA7 | E1A / E1B | 左编码器，TIM3 |
-| PA9 / PA10 | USART1 TX / RX | 有线串口（`printf` 重定向到这里） |
-| PA13 / PA14 | SWDIO / SWCLK | 下载调试 |
-| PB0 / PB1 | Key2 / Key1 | K2 = 提交参数，K1 = 启动/停止 |
-| PB6 / PB7 | E2A / E2B | 右编码器，TIM4 |
-| PB8 / PB9 | `O_SCL` / `O_SDA` | OLED 软件 I2C |
-| PB10 / PB11 | `M_SCL` / `M_SDA` | MPU6050 软件 I2C |
-| PB12 / PB13 | `AIN1` / `AIN2` | 左电机方向 |
-| PB14 / PB15 | `BIN1` / `BIN2` | 右电机方向 |
-| PC13 | LED | 板载 LED，**低电平点亮**，指示 PID 是否在运行 |
+完整原理图见 [`docs/平衡车控制板-V2.0.pdf`](docs/平衡车控制板-V2.0.pdf)。下表的**原理图网名**一列就是图上标的那些标号（`AIN1`、`O_SCL` 之类），对着图找元件时用得上。
+
+| 引脚 | 原理图网名 | 功能 | 说明 |
+|---|---|---|---|
+| PA0 | `PWMA` | 左电机 PWM | TIM2_CH1 → TB6612FNG |
+| PA1 | `PWMB` | 右电机 PWM | TIM2_CH2 → TB6612FNG |
+| PA2 / PA3 | `TXD` / `RXD` | USART2 | 蓝牙模块，兼 J2 串口座 |
+| PA4 / PA5 | `K4` / `K3` | Key4 / Key3 | 板上按键，当前固件未使用 |
+| PA6 / PA7 | `E1A` / `E1B` | 左编码器 | TIM3 编码器模式 |
+| PA8 | `CE` | NRF24L01 使能 | 板上预留，当前固件未驱动 |
+| PA9 / PA10 | `TX` / `RX` | USART1 | 有线串口（`printf` 重定向到这里），兼 J3 排针 |
+| PA11 / PA12 | — | 未使用 | |
+| PA13 / PA14 | `SWDIO` / `SWCLK` | SWD | 下载调试 |
+| PA15 | `CSN` | NRF24L01 片选 | 同上未驱动 |
+| PB0 / PB1 | `K2` / `K1` | Key2 / Key1 | K2 = 提交参数，K1 = 启动/停止 |
+| PB3 / PB4 / PB5 | `SCK` / `MISO` / `MOSI` | NRF24L01 的 SPI1 | 重映射到 PB 口，同上未驱动 |
+| PB6 / PB7 | `E2A` / `E2B` | 右编码器 | TIM4 编码器模式 |
+| PB8 / PB9 | `O_SCL` / `O_SDA` | OLED 软件 I2C | 128×64 SSD1306 |
+| PB10 / PB11 | `M_SCL` / `M_SDA` | MPU6050 软件 I2C | |
+| PB12 / PB13 | `AIN1` / `AIN2` | 左电机方向 | → TB6612FNG |
+| PB14 / PB15 | `BIN1` / `BIN2` | 右电机方向 | → TB6612FNG |
+| PC13 | — | LED | 板载 LED，**低电平点亮**，指示 PID 是否在运行 |
+
+> **PB3 / PB4 / PA15 在 STM32F103 上本来是 JTAG 引脚**（`JTDO` / `NJTRST` / `JTDI`）。本工程在 CubeMX 里把 Debug 设成了 `Serial Wire` —— 只留 SWD、关掉 JTAG —— 所以这三个脚已经能当普通 GPIO 用，原理图也正是这么拿它们当 NRF24L01 的 SPI 的。将来加无线遥控时不用再动这里。
 
 ## 定时器分配
 
@@ -258,6 +268,7 @@ Core/
 Middlewares/                  # FreeRTOS 内核 + CMSIS-RTOS2 包装层
 Drivers/                      # STM32 HAL + CMSIS
 cmake/                        # 工具链文件
+docs/                         # 原理图
 Hal+FreeRTOS.ioc              # CubeMX 工程文件
 ```
 
