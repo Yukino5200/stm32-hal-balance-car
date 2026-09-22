@@ -1,6 +1,12 @@
-# 自平衡小车（STM32F103 + FreeRTOS）
+# 自平衡小车（STM32F103 + HAL 库 + FreeRTOS）
 
 两轮自平衡小车。STM32F103C8T6 上用 MPU6050 测姿态，三环级联 PID 控制两个带编码器的直流减速电机，让车身保持竖直并能用蓝牙遥控。
+
+> **关于本项目的来历**
+>
+> 本项目以 B 站 UP 主**江科大（江协科技）**的 STM32 标准库平衡车项目为原型。他那一版基于**标准库**、手写工程；这一版是我在此基础上做的**移植与重构**：改用 **HAL 库 + FreeRTOS**，工程用 **CubeMX 生成 + CLion 开发**。
+>
+> 硬件清单、控制方案和代码逻辑的实现思路**均以江科大官方为准**，本仓库主要做的是外设驱动的 HAL 化改写，以及把原来的裸机主循环拆成 FreeRTOS 任务。学习时建议对照官方视频一起看。
 
 固件架构：**PID 控制环跑在 TIM1 中断里**（硬实时，不受调度器影响），**应用逻辑拆成三个 FreeRTOS 任务**（按键 / 通信 / 显示）。
 
@@ -15,7 +21,7 @@
 | 显示 | 0.96" OLED，128×64，SSD1306 兼容，I2C 地址 `0x78` |
 | 电机驱动 | TB6612 类模块（`AIN1/AIN2/BIN1/BIN2` + `PWMA/PWMB`） |
 | 电机 | 直流减速电机 ×2，带霍尔编码器，减速比 9.27666，磁铁每转 44 计数 |
-| 蓝牙 | HC-05/06 类串口透传模块，接 USART2，**9600 8N1** |
+| 蓝牙 | JDY 系列串口透传模块，接 USART2，**9600 8N1** |
 
 MPU6050 和 OLED 都走**软件 I2C**（GPIO 位翻转），没有用硬件 I2C 外设。
 
@@ -183,25 +189,27 @@ float angle = Angle;
 
 ## 编译与烧录
 
-### 依赖
+### 环境准备
 
-- `arm-none-eabi-gcc`（工具链文件：`cmake/gcc-arm-none-eabi.cmake`）
-- CMake ≥ 3.22
-- Ninja
-- CLion（可选，但工程是按 CLion 组织的）
+| 需要什么 | 说明 |
+|---|---|
+| **CLion** | 本工程按 CLion 组织，`.idea/` 已排除在版本库外 |
+| **`arm-none-eabi-gcc`** | 交叉编译工具链，工具链文件是 `cmake/gcc-arm-none-eabi.cmake`。装好后要确认 `bin` 目录在系统 PATH 里，否则 CLion 找不到编译器 |
+| **CMake ≥ 3.22** | CLion 捆绑的版本就够 |
+| **Ninja** | 同上，CLion 捆绑的就行 |
 
-### 命令行编译
+### 在 CLion 里编译
 
-```bash
-cmake --preset Debug
-cmake --build --preset Debug
-```
+1. 用 CLion **打开工程根目录** `Hal+FreeRTOS/`（不是里面的 `build/`）
+2. CLion 会自动读取 `CMakePresets.json`。在 **CMake 工具窗**里能看到 `Debug` 和 `Release` 两个预设，选 `Debug`，点 **Reload CMake Project**。以后只要改过 `CMakeLists.txt`，都得重新 Reload 一次
+3. 构建：**Build → Build Project**（快捷键 `Ctrl+F9`）
+4. 产物在 `build/Debug/HAL.elf`，同目录还有 `HAL.map`（符号表，之后排查 Flash / RAM 占用就靠它）
 
-产物是 `build/Debug/HAL.elf` 和 `HAL.map`。工程里没配 `objcopy` 规则，所以不会自动生成 `.hex` / `.bin` —— 用 ST-Link 烧 `.elf` 就行；要 `.hex` 的话得自己加一条 `POST_BUILD` 规则。
+> 工程里没配 `objcopy` 规则，所以不会自动生成 `.hex` / `.bin`。烧录直接用 `.elf` 就行；确实需要 `.hex`，在 `CMakeLists.txt` 里补一条 `POST_BUILD` 规则即可。
 
-### CLion
+### 在 CLion 里烧录
 
-直接用 CLion 打开工程根目录，选 `Debug` 或 `Release` 预设即可。烧录用 OpenOCD 或 ST-Link 配置。
+**Run → Edit Configurations → `+` → OpenOCD Download & Run**，在 `Board config file` 里选 ST-Link 的配置文件（如 `st_myboard.cfg` 之类），目标文件选上一步生成的 `HAL.elf`。配好之后点运行，就会通过 ST-Link 下载进芯片。
 
 ### 资源占用（Debug 构建）
 
@@ -250,7 +258,7 @@ Core/
 ├── Src/
 │   ├── main.c                # CubeMX 生成，含 TIM1 中断里的 PID 控制环
 │   ├── freertos.c            # CubeMX 生成，只在 USER CODE 区加了 App_TasksCreate()
-│   ├── usart.c               # 蓝牙包机 + 投队列
+│   ├── usart.c               # 蓝牙组包状态机 + 投队列
 │   ├── MPU6050.c / OLED.c / Motor.c / Encoder.c / PID.c / Key.c ...
 │   └── ...
 Middlewares/                  # FreeRTOS 内核 + CMSIS-RTOS2 包装层
@@ -267,4 +275,12 @@ Hal+FreeRTOS.ioc              # CubeMX 工程文件
 
 - Flash 占用 94.6%，逼近上限。`-u _printf_float` 是主要开销。
 - 转向环目前只有 `DifSpeed`（左右轮速差）反馈，没有陀螺仪 Z 轴参与，抗扭转扰动的能力有限。
-- `keyTask` 里 `Key_Num` 是 ISR 写、任务读，但没加 `volatile`，属于潜在隐患。
+
+---
+
+## 声明
+
+本项目的原型来自 B 站 UP 主 **江科大（江协科技）** 的 STM32 标准库平衡车项目，**仅供学习与参考，禁止用于任何商业项目**。
+
+- 硬件清单、控制方案与代码逻辑的实现**均以江科大官方为准**。本仓库所做的是把它移植到 HAL 库 + FreeRTOS，并调整工程结构，不涉及控制方案本身的原创。
+- 若本仓库的描述与官方内容有出入，**一律以官方为准**。学习时建议对照官方视频与资料。
